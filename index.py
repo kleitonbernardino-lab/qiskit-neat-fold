@@ -214,6 +214,22 @@ HTML_UI = """<!DOCTYPE html>
     </div>
 
     <div class="card" style="margin-bottom: 2rem;">
+      <div class="card-title">🎬 Unitary Fund Pitch Video (2-Minute Microgrant Proposal)</div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Official 99-second technical demonstration by Lead Architect Kleiton Bernardino covering topological RZZ angle-folding, 0.0-RU preflight estimator, and Heron r2 calibration compatibility:
+      </p>
+      <div style="display:flex; justify-content:center; align-items:center; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--border); padding: 0.5rem;">
+        <video controls style="width:100%; max-width:800px; height:auto; border-radius:6px;" preload="metadata">
+          <source src="https://github.com/kleitonbernardino-lab/qiskit-neat-fold/raw/main/docs/video/qiskit_neat_fold_pitch_2min.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <div style="margin-top:0.75rem; text-align:center; font-size:0.85rem;">
+        <a href="https://github.com/kleitonbernardino-lab/qiskit-neat-fold/raw/main/docs/video/qiskit_neat_fold_pitch_2min.mp4" download style="color:var(--accent-cyan); text-decoration:none;">⬇️ Direct Video Download (.mp4)</a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 2rem;">
       <div class="card-title">⚠️ Mitigation Incompatibility Auditor (Mode A vs Mode B)</div>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
         IBM Quantum Runtime V2 enforces strict separation between Mode A (fractional gates) and Mode B (twirling + PEC/ZNE). Test options below:
