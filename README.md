@@ -3,8 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Qiskit 1.0+](https://img.shields.io/badge/qiskit-1.0+-613394.svg)](https://qiskit.org/)
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?logo=vercel)](https://qiskit-neat-fold.vercel.app)
 
 **Topological angle folding, zero-RU pre-flight Clifford verification, and error mitigation conflict detection for IBM Quantum Runtime V2.**
+
+> 🌐 **Interactive Live Web Demo:** Deployable with 1-click on Vercel Serverless (`api/index.py`) providing instantaneous browser-based angle folding, Clifford pre-flight estimation, and Mode A vs Mode B conflict inspection.
 
 ---
 
