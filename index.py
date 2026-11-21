@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-index.py: Root Serverless Web Entrypoint and Interactive Verification Engine for Vercel.
+index.py: WSGI Serverless Web Entrypoint and Interactive Verification Engine for Vercel.
 Exposes interactive live UI and REST API endpoints for qiskit-neat-fold.
 """
 
@@ -9,7 +9,6 @@ import os
 import sys
 import json
 import math
-from http.server import BaseHTTPRequestHandler
 
 # Add src to sys.path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -147,7 +146,6 @@ HTML_UI = """<!DOCTYPE html>
     </header>
 
     <div class="grid">
-      <!-- Tool 1: RZZ Angle Folding -->
       <div class="card">
         <div class="card-title">📐 RZZ Angle Folding</div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
@@ -176,7 +174,6 @@ HTML_UI = """<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Tool 2: Preflight Clifford Signal Estimator -->
       <div class="card">
         <div class="card-title">🛡️ 0.0-RU Preflight Estimator</div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
@@ -216,7 +213,6 @@ HTML_UI = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- Tool 3: Error Mitigation Incompatibility Detector -->
     <div class="card" style="margin-bottom: 2rem;">
       <div class="card-title">⚠️ Mitigation Incompatibility Auditor (Mode A vs Mode B)</div>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
@@ -359,63 +355,74 @@ HTML_UI = """<!DOCTYPE html>
 """
 
 
-class handler(BaseHTTPRequestHandler):
-    """Vercel Serverless Function Handler."""
+def app(environ, start_response):
+    """Standard WSGI entrypoint for Vercel Serverless Function."""
+    path = environ.get("PATH_INFO", "/")
+    method = environ.get("REQUEST_METHOD", "GET")
 
-    def _send_json(self, status: int, data: dict):
-        body = json.dumps(data, indent=2).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-        self.wfile.write(body)
+    if method == "OPTIONS":
+        headers = [
+            ("Content-Type", "text/plain"),
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type"),
+        ]
+        start_response("204 No Content", headers)
+        return [b""]
 
-    def _send_html(self, html_content: str):
-        body = html_content.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-
-    def do_GET(self):
-        path = self.path.split("?")[0].rstrip("/")
-        if path in ("", "/index.html", "/demo"):
-            self._send_html(HTML_UI)
-        elif path == "/api/health":
-            self._send_json(200, {
+    if method == "GET":
+        clean_path = path.rstrip("/")
+        if clean_path in ("", "/index.html", "/demo"):
+            body = HTML_UI.encode("utf-8")
+            headers = [
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ]
+            start_response("200 OK", headers)
+            return [body]
+        elif clean_path == "/api/health":
+            data = {
                 "status": "ok",
                 "package": "qiskit-neat-fold",
                 "version": "0.1.0",
                 "architecture": "IBM Quantum Heron r2 (Heavy-Hex)",
                 "license": "MIT",
                 "repository": "https://github.com/kleitonbernardino-lab/qiskit-neat-fold"
-            })
+            }
+            body = json.dumps(data, indent=2).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(body))),
+                ("Access-Control-Allow-Origin", "*"),
+            ]
+            start_response("200 OK", headers)
+            return [body]
         else:
-            self._send_html(HTML_UI)
+            body = HTML_UI.encode("utf-8")
+            headers = [
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ]
+            start_response("200 OK", headers)
+            return [body]
 
-    def do_POST(self):
-        path = self.path.split("?")[0].rstrip("/")
-        content_length = int(self.headers.get("Content-Length", 0))
-        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
-
+    if method == "POST":
         try:
-            payload = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
-        except Exception as e:
-            self._send_json(400, {"error": "Invalid JSON", "details": str(e)})
-            return
+            content_length = int(environ.get("CONTENT_LENGTH", 0))
+        except (ValueError, TypeError):
+            content_length = 0
 
-        if path in ("/api/fold", "/fold"):
+        request_body = environ["wsgi.input"].read(content_length) if content_length > 0 else b"{}"
+        try:
+            payload = json.loads(request_body.decode("utf-8")) if request_body else {}
+        except Exception as e:
+            err_body = json.dumps({"error": "Invalid JSON", "details": str(e)}).encode("utf-8")
+            headers = [("Content-Type", "application/json"), ("Content-Length", str(len(err_body)))]
+            start_response("400 Bad Request", headers)
+            return [err_body]
+
+        clean_path = path.rstrip("/")
+        if clean_path in ("/api/fold", "/fold"):
             theta = float(payload.get("theta", 2.67035))
             tol = float(payload.get("tol", 1e-12))
             folded_theta, neg, reflected, is_id = fold_angle_half_pi(theta, tol=tol)
@@ -431,7 +438,7 @@ class handler(BaseHTTPRequestHandler):
             else:
                 sequence = f"RZZ({folded_theta:.5f})"
 
-            self._send_json(200, {
+            data = {
                 "status": "success",
                 "original_theta": theta,
                 "folded_theta": round(folded_theta, 6),
@@ -441,38 +448,64 @@ class handler(BaseHTTPRequestHandler):
                 "clifford_sequence": sequence,
                 "domain": "(0, pi/2]",
                 "target_hardware": "IBM Heron r2"
-            })
+            }
+            body = json.dumps(data, indent=2).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(body))),
+                ("Access-Control-Allow-Origin", "*"),
+            ]
+            start_response("200 OK", headers)
+            return [body]
 
-        elif path in ("/api/preflight", "/preflight"):
+        elif clean_path in ("/api/preflight", "/preflight"):
             depth = int(payload.get("depth", 120))
             num_1q = int(payload.get("num_1q", 250))
             num_2q = int(payload.get("num_2q", 80))
             num_meas = int(payload.get("num_meas", 2))
             shots = int(payload.get("shots", 4096))
 
-            result = compute_preflight_metrics(depth, num_1q, num_2q, num_meas, shots)
-            result["status"] = "success"
-            self._send_json(200, result)
+            data = compute_preflight_metrics(depth, num_1q, num_2q, num_meas, shots)
+            data["status"] = "success"
+            body = json.dumps(data, indent=2).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(body))),
+                ("Access-Control-Allow-Origin", "*"),
+            ]
+            start_response("200 OK", headers)
+            return [body]
 
-        elif path in ("/api/conflict", "/conflict"):
+        elif clean_path in ("/api/conflict", "/conflict"):
             options = payload.get("options", payload)
             detector = MitigationConflictDetector(strict=False)
             conflicts = detector.inspect_options(options)
-            self._send_json(200, {
+            data = {
                 "status": "success",
                 "valid": len(conflicts) == 0,
                 "conflicts": conflicts
-            })
+            }
+            body = json.dumps(data, indent=2).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(body))),
+                ("Access-Control-Allow-Origin", "*"),
+            ]
+            start_response("200 OK", headers)
+            return [body]
 
         else:
-            self._send_json(404, {"error": "Endpoint not found", "path": path})
+            err_body = json.dumps({"error": "Endpoint not found", "path": path}).encode("utf-8")
+            headers = [("Content-Type", "application/json"), ("Content-Length", str(len(err_body)))]
+            start_response("404 Not Found", headers)
+            return [err_body]
 
 
-# WSGI / ASGI compat aliases
-app = handler
+# Compatibility handler
+handler = app
 
 if __name__ == "__main__":
-    from http.server import HTTPServer
-    server = HTTPServer(("0.0.0.0", 8080), handler)
-    print("Serving qiskit-neat-fold demo at http://localhost:8080")
-    server.serve_forever()
+    from wsgiref.simple_server import make_server
+    print("Serving WSGI qiskit-neat-fold demo at http://localhost:8080")
+    httpd = make_server("0.0.0.0", 8080, app)
+    httpd.serve_forever()

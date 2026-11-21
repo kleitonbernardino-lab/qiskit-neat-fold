@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "qiskit-neat-fold"
@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Quantum Open Source Contributor", email = "research@genesix.tech" }
+    { name = "Quantum Open Source Contributor" }
 ]
 keywords = [
     "quantum",
@@ -48,5 +48,8 @@ Repository = "https://github.com/kleitonbernardino-lab/qiskit-neat-fold"
 Issues = "https://github.com/kleitonbernardino-lab/qiskit-neat-fold/issues"
 
 [tool.vercel]
-entrypoint = "index.py"
+entrypoint = "index:app"
+
+[tool.uv]
+package = false
 
