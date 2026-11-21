@@ -46,3 +46,7 @@ dev = [
 Homepage = "https://github.com/kleitonbernardino-lab/qiskit-neat-fold"
 Repository = "https://github.com/kleitonbernardino-lab/qiskit-neat-fold"
 Issues = "https://github.com/kleitonbernardino-lab/qiskit-neat-fold/issues"
+
+[tool.vercel]
+entrypoint = "index.py"
+
