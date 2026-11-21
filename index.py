@@ -355,9 +355,26 @@ HTML_UI = """<!DOCTYPE html>
 """
 
 
+import urllib.parse
+
+
 def app(environ, start_response):
     """Standard WSGI entrypoint for Vercel Serverless Function."""
-    path = environ.get("PATH_INFO", "/")
+    # Resolve real path from __path query rewrite, Vercel proxy headers, or PATH_INFO
+    query_str = environ.get("QUERY_STRING", "")
+    parsed_qs = urllib.parse.parse_qs(query_str)
+    
+    if "__path" in parsed_qs and parsed_qs["__path"]:
+        path = parsed_qs["__path"][0]
+    else:
+        path = (
+            environ.get("HTTP_X_MATCHED_PATH")
+            or environ.get("RAW_URI")
+            or environ.get("REQUEST_URI")
+            or environ.get("PATH_INFO", "/")
+        )
+    
+    path = path.split("?")[0]
     method = environ.get("REQUEST_METHOD", "GET")
 
     if method == "OPTIONS":
