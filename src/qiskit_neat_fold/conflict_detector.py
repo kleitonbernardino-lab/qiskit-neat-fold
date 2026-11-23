@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 conflict_detector.py: Local Policy & Options Consistency Validator.
 

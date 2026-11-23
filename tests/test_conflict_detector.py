@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Unit tests for MitigationConflictDetector."""
 
 from qiskit_neat_fold.conflict_detector import MitigationConflictDetector, MitigationConflictError

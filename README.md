@@ -1,4 +1,4 @@
-﻿# qiskit-neat-fold
+# qiskit-neat-fold
 
 Topological RZZ(theta) angle folding, zero-RU heuristic attenuation & cost estimation, and runtime options policy validation for Qiskit transpilation workflows.
 
@@ -18,7 +18,7 @@ qiskit-neat-fold provides three modular, self-contained utilities:
 
 ## Scope & Limitations
 
-- NeatCliffordPreflight computes a **first-order heuristic attenuation proxy** from aggregate 1Q, 2Q, and readout error rates; it is not a full density-matrix simulator or logical syndrome survival predictor.
+- NeatCliffordPreflight computes a **first-order heuristic attenuation proxy** from aggregate 1Q, 2Q, and measured-qubit readout error rates; uncompiled 3+ qubit gates use a configurable heuristic multiplier (default 6.0x 2Q gates, not a universal physical decomposition bound). It is not a full density-matrix simulator or logical syndrome survival predictor.
 - MitigationConflictDetector enforces **documented local configuration policies** rather than replacing server-side Qiskit Runtime schema validation.
 
 ## License

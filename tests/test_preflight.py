@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Unit tests for NeatCliffordPreflight."""
 
 from qiskit import QuantumCircuit

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 demo_preflight_and_fold.py: End-to-end demonstration of NeatCliffordPreflight,
 FoldRzzAnglePass, and MitigationConflictDetector.

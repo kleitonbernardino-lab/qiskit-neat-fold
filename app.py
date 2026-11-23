@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 app.py: WSGI development server entrypoint using the `app` callable from index.py.
 """

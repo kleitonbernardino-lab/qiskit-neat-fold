@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """qiskit-neat-fold: Topological angle folding, heuristic preflight, and options policy checks."""
 
 from .fold_rzz import FoldRzzAnglePass, fold_angle_half_pi

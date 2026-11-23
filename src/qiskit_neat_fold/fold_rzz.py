@@ -1,12 +1,10 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 fold_rzz.py: TransformationPass for analytical folding of RZZ angles to (0, pi/2].
 
-Physical superconducting architectures with fixed-frequency transmons (e.g., IBM Heron r2)
-calibrate native cross-resonance and ZZ interactions over the fundamental domain theta in (0, pi/2].
-This pass folds arbitrary finite RZZ parameters analytically into (0, pi/2] using local
-single-qubit Clifford conjugations (X, Z), preserving exact two-qubit unitary equivalence
-up to global phase without introducing GlobalPhaseGate nodes.
+Folds bounded RZZ parameters analytically into (0, pi/2] using local single-qubit
+Clifford conjugations (X, Z), preserving two-qubit unitary equivalence up to global
+phase within the configured numerical tolerance `tol` without introducing GlobalPhaseGate nodes.
 """
 
 from __future__ import annotations
@@ -17,33 +15,38 @@ from qiskit.dagcircuit import DAGCircuit
 from qiskit.circuit.library import RZZGate, ZGate, XGate
 from qiskit.circuit import ParameterExpression
 
+MAX_TOLERANCE = 1e-8
+MIN_TOLERANCE = 1e-13
+MAX_ANGLE_MAGNITUDE = 32.0 * math.pi  # ulp(32*pi) ~= 1.42e-14 << 1e-12
+
 
 def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, bool, bool]:
     """
-    Folds a finite angle theta in R into the fundamental calibration window (0, pi/2].
+    Folds an angle theta (with |theta| <= 32*pi, ensuring float64 ulp <= 1.42e-14 << tol) into (0, pi/2].
 
-    Returns:
-        (folded_theta, neg, reflected, is_identity)
-
-    Mathematical identities (up to global phase):
-        - RZZ(2*k*pi) = I (x) I -> (0.0, False, False, True)
-        - RZZ((2*k+1)*pi) = -i (Z (x) Z) -> (0.0, False, True, False) [requires Z0 * Z1]
-        - RZZ(-theta) = X0 * RZZ(theta) * X0
-        - RZZ(pi - theta) = Z0 * Z1 * X0 * RZZ(theta) * X0
+    Angles within `tol` of 2*k*pi are treated as identity; angles within `tol` of
+    (2*k+1)*pi are mapped to the singular Z (x) Z Clifford operation (up to global phase).
     """
     if isinstance(theta, bool) or not isinstance(theta, (int, float)) or not math.isfinite(theta):
         raise ValueError(f"Angle theta must be a finite real number, got {theta!r}")
-    if tol <= 0 or not math.isfinite(tol):
-        raise ValueError(f"Tolerance tol must be positive and finite, got {tol!r}")
+    if abs(theta) > MAX_ANGLE_MAGNITUDE:
+        raise ValueError(
+            f"Angle magnitude |theta|={abs(theta):.3e} exceeds safe float64 modulo-2pi range ({MAX_ANGLE_MAGNITUDE:.3e})."
+        )
+    if (
+        isinstance(tol, bool)
+        or not isinstance(tol, (int, float))
+        or not math.isfinite(tol)
+        or tol < MIN_TOLERANCE
+        or tol > MAX_TOLERANCE
+    ):
+        raise ValueError(f"Tolerance tol must be within [{MIN_TOLERANCE}, {MAX_TOLERANCE}], got {tol!r}")
 
     tau = 2.0 * math.pi
-    # Wrap to (-pi, pi]
     norm_theta = ((theta + math.pi) % tau) - math.pi
-    # Handle exact -pi boundary consistently as +pi
-    if math.isclose(norm_theta, -math.pi, abs_tol=tol):
+    if abs(norm_theta + math.pi) < tol:
         norm_theta = math.pi
 
-    # Multiple of 2*pi -> exact identity up to global phase
     if abs(norm_theta) < tol:
         return 0.0, False, False, True
 
@@ -57,7 +60,6 @@ def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, b
         norm_theta = math.pi - norm_theta
         reflected = True
 
-    # Odd multiple of pi (norm_theta ~ pi after reflection -> 0.0 with reflected=True)
     if abs(norm_theta) < tol:
         return 0.0, False, True, False
 
@@ -66,13 +68,19 @@ def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, b
 
 
 class FoldRzzAnglePass(TransformationPass):
-    """
-    Transpiler transformation pass that folds all bound RZZGate parameters to (0, pi/2].
-    """
+    """Transpiler transformation pass that folds bound RZZGate parameters to (0, pi/2]."""
 
     def __init__(self, target_tolerance: float = 1e-12):
         super().__init__()
-        self.target_tolerance = target_tolerance
+        if (
+            isinstance(target_tolerance, bool)
+            or not isinstance(target_tolerance, (int, float))
+            or not math.isfinite(target_tolerance)
+            or target_tolerance < MIN_TOLERANCE
+            or target_tolerance > MAX_TOLERANCE
+        ):
+            raise ValueError(f"target_tolerance must be within [{MIN_TOLERANCE}, {MAX_TOLERANCE}], got {target_tolerance!r}")
+        self.target_tolerance = float(target_tolerance)
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         for node in dag.op_nodes():
@@ -101,12 +109,10 @@ class FoldRzzAnglePass(TransformationPass):
             sub_dag.add_qubits([q0, q1])
 
             if is_id:
-                # RZZ(2*k*pi) == I (x) I
                 dag.substitute_node_with_dag(node, sub_dag)
                 continue
 
             if reflected and folded_theta == 0.0:
-                # RZZ((2*k+1)*pi) == -i (Z0 (x) Z1)
                 sub_dag.apply_operation_back(ZGate(), qargs=[q0])
                 sub_dag.apply_operation_back(ZGate(), qargs=[q1])
                 dag.substitute_node_with_dag(node, sub_dag)

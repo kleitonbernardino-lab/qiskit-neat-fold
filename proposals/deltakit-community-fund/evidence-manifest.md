@@ -1,21 +1,18 @@
-﻿# Evidence Manifest — Deltakit Community Fund (Issue #437)
+# Experimental Context & Evidence Manifest — Deltakit Community Fund (Issue #437)
 
-## Scope & Scientific Alignment
+## Scope & Implementation Status
 - **Package:** `qiskit-neat-fold` (`v0.1.0`)
-- **Core Capabilities:**
-  1. `FoldRzzAnglePass`: Exact unitary angle folding for native fractional $R_{ZZ}(\theta)$ gates into $(0, \pi/2]$ using local single-qubit Clifford conjugations ($X, Z$).
-  2. `NeatCliffordPreflight`: Zero-RU pre-dispatch analytical Pauli-Lindblad attenuation & RU cost estimator with exact `Clifford` membership verification and explicit calibration baselines.
-  3. `MitigationConflictDetector`: Static compatibility validator preventing Mode A (Fractional Gates) vs Mode B (Pauli Twirling / PEC / ZNE) and TREX vs M3 configuration clashes.
+- **Implemented & Unit-Tested Capabilities (Current Release):**
+  1. `FoldRzzAnglePass`: Exact analytical angle folding for bound $R_{ZZ}(\theta)$ gates into $(0, \pi/2]$ using local single-qubit Clifford conjugations ($X, Z$), mapping odd multiples of $\pi$ to $Z \otimes Z$ and even multiples of $\pi$ to identity up to global phase.
+  2. `NeatCliffordPreflight`: Zero-RU pre-dispatch static analyzer combining exact Clifford group membership checks (`qiskit.quantum_info.Clifford`) with a first-order heuristic attenuation & RU cost proxy.
+  3. `MitigationConflictDetector`: Local policy validator separating Mode A (native fractional gates) from Mode B (standard Clifford/Pauli-twirled workflows) and flagging contradictory readout mitigation options.
 
-## Verified IBM Quantum Telemetry (Sanitized)
-- **Dataset:** 15 physical QPU jobs, 86 PUBs, 105.0 s total QPU charge time (`1.643304 RUs`) across 3 calibrated backends (`ibm_kingston` Heron r2).
-- **Reference Job ID:** `dc1s1c5hdvas73bl97e0` (`ibm_kingston`, `2026-11-23T04:27:28Z`, `0.099868 RU` across 4 batched PUBs, `circuit_sha256`: `38405f6b1ba8495c12930470fa1843dcd025b3d86553d12aef41f469207e082b`).
-- **Key Empirical Finding Driving Milestone 1:** Standard `PadDynamicalDecoupling` without spectator pruning generated `154` spectator `delay` ops per 2-qubit active PUB (`92.77%` spectator DD overhead; `88,886` wasted ops across 15 jobs) and `2.1508 s` mean per-job charge overhead.
-- **Zero-RU Parity/Syndrome Purification Benchmark (`dc1s1c5hdvas73bl97e0`):**
-  - 2Q Bell (`PUB0`): Raw fidelity `0.989502` -> Mitigated/$\mathbb{Z}_2$-purified `0.999874`.
-  - 5Q GHZ (`PUB1`): Raw fidelity `0.933350` -> Mitigated/$\mathbb{Z}_2$-purified `0.987571`.
-  - 7Q Ring (`PUB2`): Raw fidelity `0.896484` -> Mitigated/$\mathbb{Z}_2$-purified `0.970232`.
+## Separate Experimental Context (IBM Quantum Telemetry)
+*Note: The telemetry below served as empirical motivation for the roadmap milestones; it is not presented as a direct hardware validation of the heuristic preflight estimator or RZZ folding pass.*
+- **Context Dataset:** 15 physical QPU jobs (86 PUBs / Primitive Unified Blocs, 105.0 s QPU charge time) executed during hardware characterization experiments on `ibm_kingston` (Heron r2).
+- **Reference Job (`dc1s1c5hdvas73bl97e0`):** `ibm_kingston`, `2026-11-23T04:27:28Z`, `0.099868 RU` across 4 batched PUBs (`circuit_sha256`: `38405f6b1ba8495c12930470fa1843dcd025b3d86553d12aef41f469207e082b`).
+- **Observed Hardware Motivation for M1:** Unpruned `PadDynamicalDecoupling` inserted 154 spectator `delay` instructions on a 2-qubit active PUB (`92.77%` spectator DD overhead), motivating active-qubit-only DD pruning in Milestone 1.
 
-## Roadmap Milestones (Grant Scope)
+## Proposed Grant Roadmap (Future Deliverables)
 - **M1:** Live `BackendV2.target` calibration ingestion into `NeatCliffordPreflight` and active-qubit-only DD pruning pass.
-- **M2:** Hardware A/B benchmark of folded vs unfolded fractional $R_{ZZ}$ circuits on IBM Heron r2 & Deltakit QEC syndrome-extraction pipelines.
+- **M2:** Controlled hardware A/B benchmark of folded vs unfolded fractional $R_{ZZ}$ circuits on IBM Heron r2 and Deltakit QEC syndrome-extraction pipelines.
