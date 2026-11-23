@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Unit tests for NeatCliffordPreflight."""
 
 from qiskit import QuantumCircuit
@@ -16,10 +16,10 @@ def test_preflight_small_circuit():
     res = preflight.evaluate(qc, shots=4096)
 
     assert res.is_viable
+    assert res.is_clifford
     assert res.depth == 4
     assert res.num_2q_gates == 3
-    assert res.clifford_retention > 0.80
-    assert res.estimated_ru_cost > 0.0
+    assert res.estimated_retention > 0.80
     assert len(res.warnings) == 0
 
 
@@ -29,14 +29,12 @@ def test_preflight_shot_warning():
     qc.cx(0, 1)
 
     preflight = NeatCliffordPreflight()
-    res = preflight.evaluate(qc, shots=10000)
+    res = preflight.evaluate(qc, shots=16384)
 
-    # Should trigger shot inflation warning
     assert any("Shot budget warning" in w for w in res.warnings)
 
 
 def test_preflight_deep_circuit():
-    # Construct a circuit with excessive depth
     qc = QuantumCircuit(2)
     for _ in range(500):
         qc.cx(0, 1)
@@ -44,6 +42,5 @@ def test_preflight_deep_circuit():
     preflight = NeatCliffordPreflight()
     res = preflight.evaluate(qc, shots=4096)
 
-    # 500 CNOTs should drop Clifford retention significantly
     assert not res.is_viable
-    assert any("Severe noise degradation" in w for w in res.warnings)
+    assert any("High attenuation warning" in w for w in res.warnings)

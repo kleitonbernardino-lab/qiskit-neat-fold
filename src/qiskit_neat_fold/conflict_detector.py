@@ -1,81 +1,130 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-conflict_detector.py: Static Detection of Runtime and Mitigation Incompatibilities for IBM Quantum Runtime V2.
+conflict_detector.py: Local Policy & Options Consistency Validator.
 
-Guarantees strict separation between Mode A (Native Fractional Gates) and Mode B (Standard Basis + PEC/ZNE),
-preventing runtime job abortions and statistical probability corruption.
+Checks runtime option dictionaries against local policy rules separating Mode A
+(native fractional gates) from Mode B (standard basis + Pauli twirling / PEC) and
+preventing contradictory readout mitigation flags.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 
 class MitigationConflictError(Exception):
-    """Raised when mutually exclusive quantum error mitigators or runtime options are combined."""
+    """Raised when strict=True and hard policy conflicts exist in runtime options."""
     pass
+
+
+@dataclass
+class InspectionReport:
+    """Structured result separating hard conflicts from non-blocking advisories."""
+    conflicts: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+
+    @property
+    def is_valid(self) -> bool:
+        return len(self.conflicts) == 0
+
+
+def _get_strict_bool(mapping: Dict[str, Any], key: str, default: bool = False) -> bool:
+    if key not in mapping or mapping[key] is None:
+        return default
+    val = mapping[key]
+    if not isinstance(val, bool):
+        raise TypeError(f"Option '{key}' must be a boolean (True/False), got {type(val).__name__}: {val!r}")
+    return val
+
+
+def _get_strict_dict(mapping: Dict[str, Any], key: str) -> Dict[str, Any]:
+    if key not in mapping or mapping[key] is None:
+        return {}
+    val = mapping[key]
+    if not isinstance(val, dict):
+        raise TypeError(f"Option '{key}' must be a dictionary, got {type(val).__name__}")
+    return val
 
 
 class MitigationConflictDetector:
     """
-    Validates Qiskit Runtime options dictionary against known hardware and mathematical constraints.
+    Validates runtime option dictionaries against local policy constraints.
     """
 
     def __init__(self, strict: bool = True):
+        if not isinstance(strict, bool):
+            raise TypeError("'strict' must be a boolean.")
         self.strict = strict
 
-    def inspect_options(self, options: Dict[str, Any]) -> List[str]:
+    def inspect_report(self, options: Optional[Dict[str, Any]]) -> InspectionReport:
         """
-        Inspects runtime options dict for dangerous or invalid combinations.
-        
-        Returns:
-            List of detected conflict messages.
-        Raises:
-            MitigationConflictError if strict=True and critical conflicts exist.
+        Evaluates runtime options and returns both hard conflicts and non-blocking warnings.
         """
+        if options is None or not isinstance(options, dict):
+            raise TypeError("Runtime 'options' must be a valid dictionary.")
+
         conflicts: List[str] = []
+        warnings: List[str] = []
 
-        # Extract flags safely
-        use_fractional = options.get("use_fractional_gates", False)
-        
-        twirling = options.get("twirling", {})
-        twirling_gates = twirling.get("enable_gates", False)
-        twirling_measure = twirling.get("enable_measure", False)
+        use_fractional = _get_strict_bool(options, "use_fractional_gates", False)
 
-        resilience = options.get("resilience", {})
-        zne_enabled = resilience.get("zne_mitigation", False) or (options.get("resilience_level") == 2)
-        pec_enabled = resilience.get("pec_mitigation", False) or (options.get("resilience_level") == 3)
-        
-        readout_mitigation = options.get("readout_mitigation", True)
-        use_m3 = options.get("use_m3", False)
-        use_trex = twirling_measure or options.get("use_trex", False)
+        twirling = _get_strict_dict(options, "twirling")
+        twirling_gates = _get_strict_bool(twirling, "enable_gates", False)
+        twirling_measure = _get_strict_bool(twirling, "enable_measure", False)
 
-        # Rule 1: Fractional gates cannot be combined with gate twirling
+        resilience = _get_strict_dict(options, "resilience")
+        resilience_level = options.get("resilience_level")
+        if resilience_level is not None and (isinstance(resilience_level, bool) or not isinstance(resilience_level, int) or resilience_level not in (0, 1, 2, 3)):
+            raise ValueError(f"'resilience_level' must be an integer in {{0, 1, 2, 3}}, got {resilience_level!r}")
+
+        zne_enabled = _get_strict_bool(resilience, "zne_mitigation", False) or (resilience_level == 2)
+        pec_enabled = _get_strict_bool(resilience, "pec_mitigation", False) or (resilience_level == 3)
+
+        readout_mitigation = _get_strict_bool(options, "readout_mitigation", True)
+        use_m3 = _get_strict_bool(options, "use_m3", False)
+        use_trex = twirling_measure or _get_strict_bool(options, "use_trex", False)
+
+        # Policy Rule 1: Fractional gates + gate twirling
         if use_fractional and twirling_gates:
-            msg = (
-                "[CONFLICT - Mode A Violation] 'use_fractional_gates=True' cannot be combined with "
-                "'twirling.enable_gates=True'. Twirling standardizes on Clifford generators and corrupts "
-                "continuous fractional angle calibration."
+            conflicts.append(
+                "[CONFLICT - Mode A Policy] 'use_fractional_gates=True' combined with "
+                "'twirling.enable_gates=True' violates Mode A local policy: Pauli twirling assumes "
+                "Clifford 2Q generators and invalidates continuous fractional angle calibration."
             )
-            conflicts.append(msg)
 
-        # Rule 2: Fractional gates cannot be combined with PEC or PEA
+        # Policy Rule 2: Fractional gates + PEC
         if use_fractional and pec_enabled:
-            msg = (
-                "[CONFLICT - Mode A vs Mode B Clash] Native fractional gates cannot be combined with PEC "
-                "(Probabilistic Error Cancellation). PEC requires Pauli-Lindblad decomposition over standard basis CZ."
+            conflicts.append(
+                "[CONFLICT - Mode A vs Mode B Policy] Native fractional gates combined with PEC "
+                "(Probabilistic Error Cancellation) requires Pauli-Lindblad noise learning over standard basis gates."
             )
-            conflicts.append(msg)
 
-        # Rule 3: TREX vs M3 clash
-        if use_trex and use_m3:
-            msg = (
-                "[CONFLICT - Measurement Mitigator Clash] TREX (Twirled Readout) cannot be stacked with M3 "
-                "(Matrix Inversion). Measurement twirling randomizes the basis, rendering the static calibration "
-                "matrix of M3 invalid."
+        # Advisory Rule 3: Fractional gates + ZNE (non-blocking warning)
+        if use_fractional and zne_enabled:
+            warnings.append(
+                "[ADVISORY - Mode A + ZNE] Combining fractional gates with ZNE (Zero-Noise Extrapolation) "
+                "depends on target backend folding/pulse-stretching support; verify noise amplification factors."
             )
-            conflicts.append(msg)
+
+        # Policy Rule 4: TREX vs M3 clash
+        if use_trex and use_m3:
+            conflicts.append(
+                "[CONFLICT - Readout Policy] TREX (Twirled Readout) cannot be stacked with M3 "
+                "(Matrix-free Measurement Mitigation) because measurement twirling randomizes the readout basis."
+            )
+
+        # Policy Rule 5: Contradictory disabled readout mitigation while requesting TREX or M3
+        if not readout_mitigation and (use_trex or use_m3):
+            conflicts.append(
+                "[CONFLICT - Readout Policy] 'readout_mitigation=False' contradicts active "
+                "measurement mitigation flags (TREX or M3)."
+            )
 
         if self.strict and conflicts:
             raise MitigationConflictError("\n".join(conflicts))
 
-        return conflicts
+        return InspectionReport(conflicts=conflicts, warnings=warnings)
+
+    def inspect_options(self, options: Optional[Dict[str, Any]]) -> List[str]:
+        """Backward-compatible helper returning hard conflict messages."""
+        return self.inspect_report(options).conflicts

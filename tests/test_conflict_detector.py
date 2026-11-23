@@ -1,10 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Unit tests for MitigationConflictDetector."""
 
-from qiskit_neat_fold.conflict_detector import (
-    MitigationConflictDetector,
-    MitigationConflictError,
-)
+from qiskit_neat_fold.conflict_detector import MitigationConflictDetector, MitigationConflictError
 
 
 def test_conflict_fractional_and_gate_twirling():
@@ -19,8 +16,9 @@ def test_conflict_fractional_and_gate_twirling():
         detector.inspect_options(options)
     except MitigationConflictError as e:
         raised = True
-        assert "Mode A Violation" in str(e)
-    assert raised, "Expected MitigationConflictError"
+        assert "Mode A Policy" in str(e)
+
+    assert raised
 
 
 def test_conflict_fractional_and_pec():
@@ -35,8 +33,9 @@ def test_conflict_fractional_and_pec():
         detector.inspect_options(options)
     except MitigationConflictError as e:
         raised = True
-        assert "Mode A vs Mode B Clash" in str(e)
-    assert raised, "Expected MitigationConflictError"
+        assert "Mode A vs Mode B Policy" in str(e)
+
+    assert raised
 
 
 def test_conflict_trex_and_m3():
@@ -51,18 +50,17 @@ def test_conflict_trex_and_m3():
         detector.inspect_options(options)
     except MitigationConflictError as e:
         raised = True
-        assert "Measurement Mitigator Clash" in str(e)
-    assert raised, "Expected MitigationConflictError"
+        assert "Readout Policy" in str(e)
+
+    assert raised
 
 
 def test_valid_mode_a_options():
     detector = MitigationConflictDetector(strict=True)
     options = {
         "use_fractional_gates": True,
-        "twirling": {"enable_gates": False, "enable_measure": True}, # TREX is allowed in Mode A
+        "twirling": {"enable_gates": False, "enable_measure": True},
         "use_m3": False,
-        "resilience": {"pec_mitigation": False, "zne_mitigation": False},
     }
-
     conflicts = detector.inspect_options(options)
     assert len(conflicts) == 0

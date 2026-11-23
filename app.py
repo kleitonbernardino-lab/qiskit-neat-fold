@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-app.py: Application entrypoint alias for Vercel Python runtime.
-Directly points to handler from index.py.
+app.py: WSGI development server entrypoint using the `app` callable from index.py.
 """
-from index import handler, app
+from wsgiref.simple_server import make_server
+from index import app
 
 if __name__ == "__main__":
-    from http.server import HTTPServer
-    server = HTTPServer(("0.0.0.0", 8080), handler)
-    print("Serving qiskit-neat-fold demo at http://localhost:8080")
-    server.serve_forever()
+    with make_server("0.0.0.0", 8080, app) as httpd:
+        print("Serving qiskit-neat-fold demo at http://localhost:8080")
+        httpd.serve_forever()

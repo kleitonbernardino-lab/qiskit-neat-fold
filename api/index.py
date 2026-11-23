@@ -52,41 +52,15 @@ except ImportError:
             return conflicts
 
 
-def compute_preflight_metrics(depth: int, num_1q: int, num_2q: int, num_meas: int = 2, shots: int = 4096):
-    avg_1q_error = 0.0003
-    avg_2q_error = 0.0025
-    avg_readout_error = 0.015
-    ru_rate_per_sec = 1.0 / 60.0
-
-    retention_1q = (1.0 - avg_1q_error) ** max(0, num_1q)
-    retention_2q = (1.0 - avg_2q_error) ** max(0, num_2q)
-    retention_meas = (1.0 - avg_readout_error) ** max(0, num_meas)
-    clifford_retention = float(retention_1q * retention_2q * retention_meas)
-
-    est_duration_sec = float((depth * 350e-9 + 2.5e-6) * shots)
-    est_ru_cost = float(est_duration_sec * ru_rate_per_sec)
-    is_viable = clifford_retention >= 0.40
-
-    warnings = []
-    recommendations = []
-    if not is_viable:
-        warnings.append(f"Clifford retention ({clifford_retention:.1%}) is below 40% threshold. Circuit fidelity will collapse into depolarizing noise.")
-        recommendations.append("Apply FoldRzzAnglePass and reduce circuit depth before hardware submission.")
-    else:
-        recommendations.append("Circuit passes preflight verification. Safe for zero-waste submission to IBM Quantum Runtime V2.")
-
-    return {
-        "is_viable": is_viable,
-        "clifford_retention": round(clifford_retention, 4),
-        "clifford_retention_percent": f"{clifford_retention * 100:.2f}%",
-        "depth": depth,
-        "num_1q_gates": num_1q,
-        "num_2q_gates": num_2q,
-        "estimated_duration_sec": round(est_duration_sec, 3),
-        "estimated_ru_cost": round(est_ru_cost, 4),
-        "warnings": warnings,
-        "recommendations": recommendations,
-    }
+def compute_preflight_metrics(depth: int, num_1q: int, num_2q: int, num_qubits: int = 2, shots: int = 4096):
+    from qiskit_neat_fold.preflight import estimate_circuit_attenuation
+    return estimate_circuit_attenuation(
+        depth=depth,
+        num_1q=num_1q,
+        num_2q=num_2q,
+        num_qubits=num_qubits,
+        shots=shots,
+    )
 
 
 HTML_UI = """<!DOCTYPE html>
@@ -303,19 +277,9 @@ HTML_UI = """<!DOCTYPE html>
         const data = await res.json();
         renderPreflight(data);
       } catch (e) {
-        // Local fallback calculation
-        const ret1q = Math.pow(1.0 - 0.0003, num_1q);
-        const ret2q = Math.pow(1.0 - 0.0025, num_2q);
-        const ret = ret1q * ret2q * Math.pow(1.0 - 0.015, 2);
-        const dur = (depth * 350e-9 + 2.5e-6) * shots;
-        const ru = dur / 60.0;
-        renderPreflight({
-          is_viable: ret >= 0.40,
-          clifford_retention_percent: (ret * 100).toFixed(2) + '%',
-          estimated_duration_sec: dur.toFixed(3),
-          estimated_ru_cost: ru.toFixed(4),
-          recommendations: ret >= 0.40 ? ['Safe for zero-waste submission to IBM Quantum Runtime V2.'] : ['Clifford retention is below 40%. Circuit will collapse into depolarizing noise.']
-        });
+        document.getElementById('resViable').innerText = 'API ERROR';
+        document.getElementById('resPreflightMsg').innerText = 'Unable to reach /api/preflight: ' + e.message;
+        document.getElementById('preflightResult').style.display = 'block';
       }
     }
 
@@ -328,7 +292,7 @@ HTML_UI = """<!DOCTYPE html>
         elViable.innerText = 'ABORT (FAIL)';
         elViable.className = 'val-warn';
       }
-      document.getElementById('resRetention').innerText = data.clifford_retention_percent;
+      document.getElementById('resRetention').innerText = (data.estimated_retention_percent || data.clifford_retention_percent);
       document.getElementById('resDuration').innerText = data.estimated_duration_sec + ' s';
       document.getElementById('resRu').innerText = data.estimated_ru_cost + ' RU';
       document.getElementById('resPreflightMsg').innerText = (data.recommendations || []).join(' ');
