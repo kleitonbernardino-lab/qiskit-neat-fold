@@ -246,7 +246,7 @@ class handler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
         try:
             payload = json.loads(raw_body, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(f'Invalid JSON constant: {c}'))) if raw_body.strip() else {}
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             self._send_json(400, {"status": "error", "message": f"Invalid JSON: {exc}"})
             return
         status, data = handle_api_request(path, payload)
@@ -272,7 +272,7 @@ def app(environ, start_response):
     raw = environ["wsgi.input"].read(length).decode("utf-8") if length > 0 else "{}"
     try:
         payload = json.loads(raw, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(f'Invalid JSON constant: {c}'))) if raw.strip() else {}
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, ValueError) as exc:
         body = json.dumps({"status": "error", "message": f"Invalid JSON: {exc}"}).encode("utf-8")
         start_response("400 Bad Request", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))])
         return [body]

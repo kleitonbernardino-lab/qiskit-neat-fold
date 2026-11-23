@@ -144,3 +144,48 @@ def test_boundary_32pi_and_alias_conflict():
     )
     assert st_alias == 400
     assert "Conflicting" in d_alias["message"]
+def test_wsgi_and_http_invalid_json_constants():
+    import io
+    from api.index import app, handler
+
+    for bad_body in ('{"theta": NaN}', '{"theta": Infinity}', '{"theta": -Infinity}', '{"theta": '):
+        captured = {}
+
+        def start_response(status, headers):
+            captured["status"] = status
+            captured["headers"] = headers
+
+        environ = {
+            "REQUEST_METHOD": "POST",
+            "PATH_INFO": "/api/fold",
+            "CONTENT_LENGTH": str(len(bad_body.encode("utf-8"))),
+            "wsgi.input": io.BytesIO(bad_body.encode("utf-8")),
+        }
+        chunks = list(app(environ, start_response))
+        assert captured["status"].startswith("400"), f"Expected 400 for {bad_body!r}, got {captured['status']}"
+        assert len(chunks) == 1
+
+    # Also verify BaseHTTPRequestHandler POST error path returns HTTP 400
+    sent = {}
+
+    class DummyHandler(handler):
+        def __init__(self, body_str: str):
+            self.path = "/api/fold"
+            raw_bytes = body_str.encode("utf-8")
+            self.headers = {"Content-Length": str(len(raw_bytes))}
+            self.rfile = io.BytesIO(raw_bytes)
+            self.wfile = io.BytesIO()
+            self._status = None
+
+        def send_response(self, code, message=None):
+            self._status = code
+
+        def send_header(self, keyword, value):
+            sent.setdefault("headers", {})[keyword] = value
+
+        def end_headers(self):
+            pass
+
+    dh = DummyHandler('{"theta": NaN}')
+    dh.do_POST()
+    assert dh._status == 400
