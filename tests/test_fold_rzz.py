@@ -90,3 +90,28 @@ def test_fold_rzz_pass_unitary_equivalence():
         assert op_orig.equiv(op_folded), f"Unitary equivalence failed for theta={theta}"
         err = _max_phase_aligned_error(op_orig, op_folded)
         assert err < 1e-12, f"Matrix error {err} exceeded 1e-12 for theta={theta}"
+
+
+def test_fold_rzz_exact_global_phase_under_control_and_tiny_angles():
+    # Verify exact matrix equality (including global_phase) and .control() equivalence
+    for theta in (0.0, 2.0 * math.pi, -2.0 * math.pi, math.pi, -math.pi, 2.67035, -2.67035, 1e-11):
+        qc = QuantumCircuit(2)
+        qc.rzz(theta, 0, 1)
+        folded_qc = dag_to_circuit(FoldRzzAnglePass(target_tolerance=1e-12).run(circuit_to_dag(qc)))
+
+        # Exact matrix equality WITHOUT phase alignment (global_phase is tracked on DAG)
+        assert np.allclose(Operator(qc).data, Operator(folded_qc).data, atol=1e-12), (
+            f"Exact matrix (with global_phase) mismatch for theta={theta}"
+        )
+
+        # Controlled circuit equivalence (global phase becomes relative phase on control qubit)
+        ctrl_orig = qc.control(1)
+        ctrl_folded = folded_qc.control(1)
+        assert Operator(ctrl_orig).equiv(Operator(ctrl_folded)), (
+            f"Controlled equivalence failed for theta={theta}"
+        )
+
+    # Verify math.remainder preserves tiny angles below 1e-12 without catastrophic cancellation
+    f_tiny, _, _, is_id_tiny = fold_angle_half_pi(1e-11, tol=1e-12)
+    assert is_id_tiny is False
+    assert math.isclose(f_tiny, 1e-11, rel_tol=1e-12)

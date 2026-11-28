@@ -20,12 +20,13 @@ MIN_TOLERANCE = 1e-13
 MAX_ANGLE_MAGNITUDE = 32.0 * math.pi  # ulp(32*pi) ~= 1.42e-14 << 1e-12
 
 
-def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, bool, bool]:
+def fold_angle_half_pi_with_phase(theta: float, tol: float = 1e-12) -> Tuple[float, bool, bool, bool, float]:
     """
-    Folds an angle theta (with |theta| <= 32*pi, ensuring float64 ulp <= 1.42e-14 << tol) into (0, pi/2].
+    Folds an angle theta (with |theta| <= 32*pi, ensuring float64 ulp <= 1.42e-14 << tol) into (0, pi/2],
+    also returning the exact global phase shift `phase_shift` (radians) such that:
+        RZZ(theta) == exp(i * phase_shift) * folded_circuit_unitary.
 
-    Angles within `tol` of 2*k*pi are treated as identity; angles within `tol` of
-    (2*k+1)*pi are mapped to the singular Z (x) Z Clifford operation (up to global phase).
+    Uses IEEE-754 `math.remainder(theta, 2*pi)` to avoid subtractive cancellation for tiny angles.
     """
     if isinstance(theta, bool) or not isinstance(theta, (int, float)) or not math.isfinite(theta):
         raise ValueError(f"Angle theta must be a finite real number, got {theta!r}")
@@ -43,12 +44,17 @@ def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, b
         raise ValueError(f"Tolerance tol must be within [{MIN_TOLERANCE}, {MAX_TOLERANCE}], got {tol!r}")
 
     tau = 2.0 * math.pi
-    norm_theta = ((theta + math.pi) % tau) - math.pi
+    norm_theta = math.remainder(theta, tau)
+    k_turns = round((theta - norm_theta) / tau)
+    phase_shift = math.pi if (k_turns % 2) != 0 else 0.0
+
+    # Canonicalize -pi to +pi (adjusting phase by pi since RZZ(-pi) = -RZZ(+pi))
     if abs(norm_theta + math.pi) < tol:
         norm_theta = math.pi
+        phase_shift = (phase_shift + math.pi) % tau
 
     if abs(norm_theta) < tol:
-        return 0.0, False, False, True
+        return 0.0, False, False, True, phase_shift
 
     neg = False
     if norm_theta < 0.0:
@@ -59,12 +65,26 @@ def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, b
     if norm_theta > (math.pi / 2.0) + tol:
         norm_theta = math.pi - norm_theta
         reflected = True
+        # RZZ(+a) = -i (Z x Z) X0 RZZ(pi-a) X0  -> phase -pi/2
+        # RZZ(-a) = +i (Z x Z) RZZ(pi-a)        -> phase +pi/2
+        phase_shift = (phase_shift + (math.pi / 2.0 if neg else -math.pi / 2.0)) % tau
 
     if abs(norm_theta) < tol:
-        return 0.0, False, True, False
+        return 0.0, False, True, False, phase_shift
 
     norm_theta = max(tol, min(math.pi / 2.0, norm_theta))
-    return float(norm_theta), neg, reflected, False
+    return float(norm_theta), neg, reflected, False, phase_shift
+
+
+def fold_angle_half_pi(theta: float, tol: float = 1e-12) -> Tuple[float, bool, bool, bool]:
+    """
+    Folds an angle theta (with |theta| <= 32*pi, ensuring float64 ulp <= 1.42e-14 << tol) into (0, pi/2].
+
+    Angles within `tol` of 2*k*pi are treated as identity; angles within `tol` of
+    (2*k+1)*pi are mapped to the singular Z (x) Z Clifford operation (up to global phase).
+    """
+    folded_theta, neg, reflected, is_id, _ = fold_angle_half_pi_with_phase(theta, tol=tol)
+    return folded_theta, neg, reflected, is_id
 
 
 class FoldRzzAnglePass(TransformationPass):
@@ -99,9 +119,11 @@ class FoldRzzAnglePass(TransformationPass):
             except (TypeError, ValueError):
                 continue
 
-            folded_theta, neg, reflected, is_id = fold_angle_half_pi(
+            folded_theta, neg, reflected, is_id, phase_shift = fold_angle_half_pi_with_phase(
                 theta_val, tol=self.target_tolerance
             )
+            if phase_shift:
+                dag.global_phase = (float(dag.global_phase) + phase_shift) % (2.0 * math.pi)
 
             sub_dag = DAGCircuit()
             q0 = node.qargs[0]
